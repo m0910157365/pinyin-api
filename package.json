@@ -1,0 +1,23 @@
+{
+  "name": "pinyin-api",
+  "version": "1.0.0",
+  "description": "A backend API for pinyin question management using Node.js, Express, and MongoDB.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "node",
+    "express",
+    "mongodb",
+    "api"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "mongoose": "^8.3.4"
+  }
+}

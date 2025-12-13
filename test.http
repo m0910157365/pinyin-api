@@ -1,0 +1,47 @@
+### 1. POST 測試：新增一個題目 (使用 Q004，確保 ID 唯一)
+# 預期：如果 Q004 不存在，返回 201 Created。
+POST http://localhost:3000/api/questions
+Content-Type: application/json
+
+{
+    "question_id": "Q004",
+    "word": "漢語",
+    "correct_pinyin": "hàn yǔ",
+    "options": ["han yu", "hàn yǔ", "han yu", "han yuu"],
+    "difficulty_score": 0.6
+}
+
+### ----------------------------------------------------
+
+### 2. GET 測試：獲取所有題目，確認 Q004 是否新增成功
+GET http://localhost:3000/api/questions
+
+### ----------------------------------------------------
+
+### 3. PUT 測試：更新 Q004 的 "word" 欄位和難度
+# 預期：返回 200 OK，word 欄位會從「漢語」變成「測試更新」
+PUT http://localhost:3000/api/questions/Q004
+Content-Type: application/json
+
+{
+    "word": "測試更新",
+    "difficulty_score": 0.9 
+}
+
+### ----------------------------------------------------
+
+### 4. GET 測試：獲取 Q004，確認更新結果
+# 預期：返回的數據中 word 應該是 "測試更新"
+GET http://localhost:3000/api/questions/Q004
+
+### ----------------------------------------------------
+
+### 5. DELETE 測試：刪除 Q004 題目
+# 預期：返回 200 OK，並顯示「刪除成功」的訊息
+DELETE http://localhost:3000/api/questions/Q004
+
+### ----------------------------------------------------
+
+### 6. GET 測試：確認 Q004 已經被刪除
+# 預期：會收到 404 Not Found 錯誤訊息
+GET http://localhost:3000/api/questions/Q004
