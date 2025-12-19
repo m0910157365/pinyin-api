@@ -1,104 +1,81 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const cors = require('cors'); // 引入跨來源資源共享套件
+const cors = require('cors');
 
 const app = express();
 
-// --- 設置 Middleware ---
-app.use(cors()); // 啟動 CORS，允許 GitHub Pages 跨網域存取
-app.use(express.json()); // 解析 JSON 格式的請求體
+// --- 1. Middleware 設定 ---
+// 務必放在路由之前，確保前端 GitHub Pages 可以跨網域存取
+app.use(cors()); 
+app.use(express.json());
 
-// --- 環境變數與連線設定 ---
-// 優先使用 Render 環境變數，若無則使用您提供的連線字串
+// --- 2. 連線設定 ---
+// 優先讀取 Render 環境變數，本地測試則使用備用字串
 const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://m0910157365_db_user:m729421@cluster0.stpndej.mongodb.net/?appName=Cluster0";
 const PORT = process.env.PORT || 3000;
 
 // 連線到 MongoDB
 mongoose.connect(MONGO_URI)
-  .then(() => {
-    console.log('✅ MongoDB 連線成功');
-  })
+  .then(() => console.log('✅ MongoDB 連線成功'))
   .catch((err) => {
     console.error('❌ MongoDB 連線失敗:', err.message);
-    process.exit(1); // 部署時連線失敗則停止服務
+    process.exit(1); 
   });
 
-// --- 資料庫 Schema 定義 ---
+// --- 3. 資料庫 Schema 與 Model 定義 ---
 const pinyinSchema = new mongoose.Schema({
-  chinese_char: {
-    type: String,
-    required: true,
-    unique: true
-  },
-  pinyin: {
-    type: String,
-    required: true
-  }
+  chinese_char: { type: String, required: true, unique: true },
+  pinyin: { type: String, required: true }
 });
 
-const Pinyin = mongoose.model('Pinyin', pinyinSchema);
+// 檢查是否已定義模型，避免在某些環境下重複定義報錯
+const Pinyin = mongoose.models.Pinyin || mongoose.model('Pinyin', pinyinSchema);
 
-// --- API 路由定義 ---
+// --- 4. API 路由定義 ---
 
-// 1. 根路由：用於 Render 健康檢查 (Health Check)
+// 根路徑：供 Render 健康檢查使用
 app.get('/', (req, res) => {
-  res.status(200).send('Pinyin API 服務正在運行中！');
+  res.status(200).send('Pinyin API 服務運行中！');
 });
 
-// 2. 獲取遊戲題目 (轉換格式以符合前端 w, t, c, o 需求)
+// 遊戲專用 API：隨機抓取 15 題並轉換格式
 app.get('/api/questions', async (req, res) => {
   try {
-    // 從資料庫隨機抓取 15 筆資料 (這裡使用樣本隨機取樣)
+    // 隨機抽選 15 筆資料
     const data = await Pinyin.aggregate([{ $sample: { size: 15 } }]);
     
-    // 轉換資料結構以符合遊戲邏輯
     const formattedQuestions = data.map(item => {
-      // 簡單的選項生成邏輯：正確答案 + 三個隨機注音（建議未來可從資料庫抓取更多真實選項）
-      const distractors = ["ㄅ", "ㄆ", "ㄇ", "ㄈ", "ㄉ", "ㄊ", "ㄋ", "ㄌ"];
-      const shuffledDistractors = distractors.sort(() => 0.5 - Math.random()).slice(0, 3);
+      // 生成干擾選項 (隨機注音)
+      const distractors = ["ㄅ", "ㄆ", "ㄇ", "ㄈ", "ㄉ", "ㄊ", "ㄋ", "ㄌ", "ㄍ", "ㄎ", "ㄏ"];
+      const shuffledDistractors = distractors
+        .filter(d => d !== item.pinyin) // 確保干擾項不與正確答案重複
+        .sort(() => 0.5 - Math.random())
+        .slice(0, 3);
       
       return {
         _id: item._id,
-        w: item.chinese_char,     // 詞彙 (例如: 滑稽)
-        t: item.chinese_char[0],  // 目標字 (取第一個字)
-        c: item.pinyin,           // 正確拼音/注音
-        o: [item.pinyin, ...shuffledDistractors] // 選項組合
+        w: item.chinese_char,      // 完整詞彙
+        t: item.chinese_char[0],   // 目標字
+        c: item.pinyin,            // 正確答案
+        o: [item.pinyin, ...shuffledDistractors] // 合併選項
       };
     });
     
     res.json(formattedQuestions);
   } catch (error) {
-    console.error('獲取題目失敗:', error);
-    res.status(500).json({ error: '無法從資料庫獲取題目' });
+    console.error('API 錯誤:', error);
+    res.status(500).json({ error: '無法獲取題目' });
   }
 });
 
-// 3. 查詢單個字 (保留原本功能)
-app.get('/api/pinyin', async (req, res) => {
-  try {
-    const char = req.query.char;
-    if (!char) return res.status(400).json({ error: '請提供要查詢的中文字' });
-
-    const result = await Pinyin.findOne({ chinese_char: char });
-    if (result) {
-      res.json({ chinese_char: result.chinese_char, pinyin: result.pinyin });
-    } else {
-      res.status(404).json({ error: `找不到字 '${char}' 的資料` });
-    }
-  } catch (error) {
-    res.status(500).json({ error: '伺服器內部錯誤' });
-  }
-});
-
-// 4. 題目回報 (API 節點佔位，可根據需求擴充邏輯)
+// 題目回報 API (佔位邏輯)
 app.post('/api/report', async (req, res) => {
   const { questionId } = req.body;
-  console.log(`收到題目回報 ID: ${questionId}`);
-  // 這裡可加入存入資料庫或計數邏輯
-  res.status(200).json({ message: "回報成功" });
+  console.log(`收到回報題目 ID: ${questionId}`);
+  res.status(200).json({ message: "已收到回報" });
 });
 
-// --- 啟動伺服器 ---
+// --- 5. 啟動伺服器 ---
 app.listen(PORT, () => {
-  console.log(`✅ 伺服器已啟動，正在監聽連接埠: ${PORT}`);
+  console.log(`✅ 伺服器已啟動，監聽連接埠: ${PORT}`);
 });
