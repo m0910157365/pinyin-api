@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>注音星空挑戰 - API 實時版</title>
+    <style>
+        :root {
+            --winter-deep: #0f172a; --main-red: #ef4444; --sub-gray: #94a3b8;
+            --correct-glow: #22c55e; --wrong-glow: #f43f5e;
+            --bg-grad: linear-gradient(135deg, #e0f2fe 0%, #3b82f6 100%);
+        }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body {
+            margin: 0; padding: 0; background: var(--bg-grad);
+            font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
+            display: flex; justify-content: center; align-items: center; 
+            height: 100dvh; overflow: hidden;
+        }
+        #game-box {
+            background: rgba(255, 255, 255, 0.98);
+            width: 92vw; height: 88vh; max-width: 400px;
+            padding: 24px; border-radius: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+            display: flex; flex-direction: column; position: relative; z-index: 5;
+        }
+        #celebrate-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+        
+        /* 介面樣式 */
+        .header { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--sub-gray); font-weight: bold; }
+        .word-area { flex-grow: 1; display: flex; align-items: center; justify-content: center; gap: 5px; }
+        .w-char { font-size: 4rem; font-weight: 800; line-height: 1.1; }
+        .w-target { color: var(--main-red); }
+        .w-sub { color: var(--sub-gray); }
+
+        .btns-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 15px; }
+        .opt-btn {
+            height: 95px; padding: 10px; border-radius: 20px; border: 2px solid #f1f5f9;
+            background: white; cursor: pointer; position: relative;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .opt-btn::before {
+            content: ''; position: absolute; top: 6px; left: 6px; width: 28px; height: 28px;
+            border-radius: 50%; display: none; align-items: center; justify-content: center;
+            font-size: 1rem; font-weight: 900; color: white; z-index: 10;
+        }
+        .zy-container { display: flex; align-items: center; justify-content: center; gap: 4px; }
+        .zy-body { writing-mode: vertical-rl; font-family: "標楷體", serif; font-size: 1.6rem; color: #334155; }
+        .zy-tone { font-family: "標楷體", serif; font-size: 1.2rem; color: #334155; width: 1.2rem; text-align: center; }
+
+        .btn-correct { border-color: var(--correct-glow) !important; background: #f0fdf4 !important; }
+        .btn-correct::before { content: '✓'; display: flex; background: var(--correct-glow); }
+        .btn-wrong { border-color: var(--wrong-glow) !important; background: #fff1f2 !important; }
+        .btn-wrong::before { content: '✕'; display: flex; background: var(--wrong-glow); }
+
+        #next-btn {
+            width: 140px; padding: 12px; background: #3b82f6; color: white;
+            border-radius: 50px; border: none; font-weight: bold; cursor: pointer;
+            display: none; margin: 0 auto 10px auto;
+        }
+
+        /* 結算樣式 */
+        .result-page { text-align: center; height: 100%; display: flex; flex-direction: column; justify-content: center; }
+        .stat-card { background: #f8fafc; padding: 15px; border-radius: 20px; margin-bottom: 12px; border: 1px solid #e2e8f0; }
+        .pr-bar-bg { width: 100%; height: 10px; background: #e2e8f0; border-radius: 10px; margin: 8px 0; overflow: hidden; }
+        .pr-bar-fill { height: 100%; background: #3b82f6; border-radius: 10px; width: 0; transition: width 1s ease-out; }
+        
+        .loading { font-size: 1.2rem; color: #3b82f6; font-weight: bold; text-align: center; margin-top: 50%; }
+    </style>
+</head>
+<body>
+
+<canvas id="celebrate-canvas"></canvas>
+
+<div id="game-box">
+    <div id="ui-root" style="height:100%; display:flex; flex-direction:column;">
+        <div class="loading">正在連線至星空資料庫...</div>
+    </div>
+</div>
+
+<script>
+    // --- API 設定 ---
+    const API_BASE = "https://pinyin-api-h76b.onrender.com";
+    let gameData = [];
+    let cur = 0, score = 0, combo = 0;
+    const totalQ = 15;
+
+    // --- 初始化：從 API 抓取題目 ---
+    async function initGame() {
+        try {
+            const response = await fetch(`${API_BASE}/api/questions?limit=${totalQ}`);
+            const data = await response.json();
+            gameData = data; 
+            render();
+        } catch (error) {
+            document.getElementById('ui-root').innerHTML = `<div class="loading" style="color:red">連線失敗，請檢查後端服務</div>`;
+            console.error("API Error:", error);
+        }
+    }
+
+    function shuffle(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+
+    function render() {
+        if (cur >= totalQ || cur >= gameData.length) { showFinal(); return; }
+        
+        const q = gameData[cur];
+        const shuffledOpts = shuffle([...q.o]);
+        const root = document.getElementById('ui-root');
+
+        root.innerHTML = `
+            <div class="header">
+                <span>題次：${cur+1} / ${totalQ}</span>
+                <span>🔥 連擊：${combo}</span>
+            </div>
+            <div class="word-area">
+                ${q.w.split('').map(c => c === q.t ? `<div class="w-char w-target">「${c}」</div>` : `<div class="w-char w-sub">${c}</div>`).join('')}
+            </div>
+            <div class="btns-grid" id="grid"></div>
+            <div style="text-align: center; min-height: 80px;">
+                <button id="next-btn" onclick="nextStep()">點此繼續</button>
+                <div style="color:#cbd5e1; font-size:0.7rem; cursor:pointer;" onclick="reportQuestion('${q._id}', this)">🚩 題目回報</div>
+            </div>
+        `;
+
+        shuffledOpts.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.className = 'opt-btn';
+            btn.dataset.ans = opt;
+            const body = opt.replace(/[ˊˇˋ˙]/g, "");
+            const tone = opt.match(/[ˊˇˋ˙]/g) || "";
+            btn.innerHTML = `<div class="zy-container"><div class="zy-body">${body}</div><div class="zy-tone">${tone}</div></div>`;
+            
+            btn.onclick = () => {
+                const btns = document.querySelectorAll('.opt-btn');
+                btns.forEach(b => b.style.pointerEvents = 'none');
+                if(opt === q.c) {
+                    btn.classList.add('btn-correct');
+                    score++; combo++;
+                    setTimeout(nextStep, 700);
+                } else {
+                    btn.classList.add('btn-wrong');
+                    combo = 0;
+                    btns.forEach(b => { if(b.dataset.ans === q.c) b.classList.add('btn-correct'); });
+                    document.getElementById('next-btn').style.display = 'block';
+                }
+            };
+            document.getElementById('grid').appendChild(btn);
+        });
+    }
+
+    // --- 實體回報功能 ---
+    async function reportQuestion(id, el) {
+        el.innerText = "⏳ 傳送中...";
+        try {
+            await fetch(`${API_BASE}/api/report`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ questionId: id })
+            });
+            el.innerText = "✅ 已收到回報";
+            el.style.color = "#22c55e";
+        } catch (e) {
+            el.innerText = "❌ 回報失敗";
+        }
+    }
+
+    function nextStep() { cur++; render(); }
+
+    // --- 慶祝特效 ---
+    function startCelebration() {
+        const canvas = document.getElementById('celebrate-canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+        let particles = [];
+        const colors = ['#3b82f6', '#ef4444', '#f59e0b', '#22c55e'];
+        for(let i=0; i<80; i++) {
+            particles.push({
+                x: canvas.width/2, y: canvas.height/3,
+                vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12 - 3,
+                color: colors[Math.floor(Math.random()*colors.length)],
+                size: Math.random()*4 + 2
+            });
+        }
+        function animate() {
+            ctx.clearRect(0,0, canvas.width, canvas.height);
+            particles.forEach((p, i) => {
+                p.x += p.vx; p.y += p.vy; p.vy += 0.2;
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x, p.y, p.size, p.size);
+                if(p.y > canvas.height) particles.splice(i, 1);
+            });
+            if(particles.length > 0) requestAnimationFrame(animate);
+        }
+        animate();
+    }
+
+    function showFinal() {
+        const accuracy = Math.round((score / totalQ) * 100);
+        const prAge = Math.min(99, Math.max(1, Math.round(accuracy * 0.98)));
+        const prAll = Math.min(99, Math.max(1, Math.round(accuracy * 0.93)));
+
+        startCelebration();
+
+        document.getElementById('ui-root').innerHTML = `
+            <div class="result-page">
+                <span style="font-size:1.2rem; color:#f59e0b; font-weight:900;">🏆 測驗完成</span>
+                <div class="stat-card">
+                    <div style="font-size:0.9rem; color:var(--sub-gray);">得分</div>
+                    <div style="font-size:2.8rem; font-weight:900; color:#3b82f6;">${accuracy}%</div>
+                </div>
+                <div class="stat-card" style="text-align:left;">
+                    <div style="display:flex; justify-content:space-between; font-weight:bold;">
+                        <span>同齡 PR 值</span>
+                        <span style="color:#3b82f6;">PR ${prAge}</span>
+                    </div>
+                    <div class="pr-bar-bg"><div id="pr-bar" class="pr-bar-fill"></div></div>
+                </div>
+                <div class="stat-card" style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-weight:bold;">所有人 PR 值</span>
+                    <span style="font-weight:bold; color:var(--sub-gray);">PR ${prAll}</span>
+                </div>
+                <button class="opt-btn" style="width:100%; height:60px; background:#3b82f6; color:white; border:none; font-size:1.1rem; font-weight:bold;" onclick="location.reload()">再試一次</button>
+            </div>
+        `;
+        setTimeout(() => { document.getElementById('pr-bar').style.width = prAge + '%'; }, 100);
+    }
+
+    initGame(); // 啟動抓取
+</script>
+</body>
+</html>
