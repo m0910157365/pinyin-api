@@ -1,16 +1,14 @@
 const express = require("express");
 const router = express.Router();
-const Quiz = require("../models/quizModel"); // ✅ 連結剛建立的 Model
+const Quiz = require("../models/quizModel");
 
-// 取得所有題目資料
+// 這裡寫 "/"，對應到 app.js 的 "/api/quiz"
 router.get("/", async (req, res) => {
     try {
-        const questions = await Quiz.find(); // 從 MongoDB 抓取
+        const questions = await Quiz.find();
         res.json(questions);
     } catch (err) {
-        console.error("抓取題目失敗:", err);
-        res.status(500).json({ message: "伺服器抓取資料失敗" });
+        res.status(500).json({ message: err.message });
     }
 });
-
 module.exports = router;
