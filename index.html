@@ -5,18 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>拼音星空練習場</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; background-color: #f0f8ff; padding: 50px; }
-        .container { background: white; padding: 30px; border-radius: 15px; shadow: 0 0 10px rgba(0,0,0,0.1); display: inline-block; }
-        button { padding: 10px 20px; font-size: 18px; cursor: pointer; background-color: #4CAF50; color: white; border: none; border-radius: 5px; }
-        #quiz-area { margin-top: 20px; font-size: 24px; }
-        .loading { color: #666; font-style: italic; }
+        body { font-family: 'Microsoft JhengHei', Arial, sans-serif; text-align: center; background-color: #0b0e14; color: white; padding: 50px; }
+        .container { background: #1a1f29; padding: 40px; border-radius: 20px; box-shadow: 0 0 20px rgba(0,255,255,0.2); display: inline-block; min-width: 300px; border: 1px solid #30363d; }
+        h1 { color: #00d2ff; text-shadow: 0 0 10px rgba(0,210,255,0.5); }
+        button { padding: 12px 30px; font-size: 20px; cursor: pointer; background: linear-gradient(135deg, #4CAF50, #2E7D32); color: white; border: none; border-radius: 50px; transition: 0.3s; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        button:hover { transform: scale(1.05); background: linear-gradient(135deg, #66BB6A, #388E3C); }
+        #quiz-area { margin-top: 30px; font-size: 26px; min-height: 100px; }
+        .quiz-card { border: 2px solid #00d2ff; padding: 25px; border-radius: 15px; background: rgba(0,210,255,0.05); animation: fadeIn 0.5s; }
+        .loading { color: #aaa; font-style: italic; animation: blink 1s infinite; }
+        .error-msg { color: #ff5252; font-size: 16px; margin-top: 10px; background: rgba(255,82,82,0.1); padding: 10px; border-radius: 5px; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes blink { 50% { opacity: 0.5; } }
     </style>
 </head>
 <body>
 
     <div class="container">
         <h1>✨ 拼音星空練習 ✨</h1>
-        <p>目前連線至雲端 API</p>
+        <p style="color: #888;">雲端 API 連線中...</p>
         <button onclick="startQuiz()">開始練習</button>
         
         <div id="quiz-area">
@@ -24,40 +30,48 @@
     </div>
 
     <script>
-        // ✅ 這是您在 Render 上的雲端 API 地址
+        // ✅ 根據您的日誌修正後的精確網址
         const API_URL = "https://pinyin-api-h76b.onrender.com/api/quiz";
 
         async function startQuiz() {
             const quizArea = document.getElementById('quiz-area');
-            quizArea.innerHTML = '<p class="loading">正在從雲端抓取題目...</p>';
+            quizArea.innerHTML = '<p class="loading">正在穿梭星空抓取題目...</p>';
 
             try {
-                // 向 Render 雲端發送請求
+                // 發送請求至 Render 伺服器
                 const response = await fetch(API_URL);
                 
-                if (!response.ok) throw new Error("網路回應不正常");
+                if (!response.ok) {
+                    throw new Error(`伺服器回應錯誤 (${response.status})`);
+                }
                 
                 const data = await response.json();
-                console.log("成功取得雲端資料:", data);
+                console.log("連線成功，取得資料：", data);
 
-                if (data.length > 0) {
-                    const firstQuestion = data[0];
+                if (data && data.length > 0) {
+                    // 隨機選一題
+                    const randomIndex = Math.floor(Math.random() * data.length);
+                    const item = data[randomIndex];
+                    
                     quizArea.innerHTML = `
-                        <div style="border: 2px solid #4CAF50; padding: 20px; border-radius: 10px;">
-                            <p><strong>題目：</strong> ${firstQuestion.word}</p>
-                            <p><strong>拼音：</strong> ${firstQuestion.pinyin}</p>
-                            <p style="color: green;">✅ 雲端連線成功！</p>
+                        <div class="quiz-card">
+                            <div style="font-size: 18px; color: #00d2ff; margin-bottom: 10px;">請練習：</div>
+                            <div style="font-size: 40px; margin-bottom: 15px; font-weight: bold;">${item.word}</div>
+                            <div style="color: #FFD700; font-family: monospace;">${item.pinyin}</div>
+                            <div style="font-size: 14px; color: #4CAF50; margin-top: 15px;">✅ 雲端連線正常</div>
                         </div>
                     `;
                 } else {
-                    quizArea.innerHTML = "<p>資料庫目前沒有題目。</p>";
+                    quizArea.innerHTML = "<p>資料庫目前是空的，請先新增題目。</p>";
                 }
             } catch (error) {
-                console.error("連線錯誤:", error);
+                console.error("連線出錯：", error);
                 quizArea.innerHTML = `
-                    <p style="color: red;">❌ 連線失敗</p>
-                    <p style="font-size: 14px;">錯誤原因: ${error.message}</p>
-                    <p style="font-size: 14px;">請檢查 Render 日誌是否顯示「成功連接到 MongoDB」</p>
+                    <div class="error-msg">
+                        <p>❌ 連線失敗</p>
+                        <p style="font-size: 14px;">原因：${error.message}</p>
+                        <p style="font-size: 12px; color: #ff8a80;">提示：請確認 Render 日誌顯示「成功連接到 MongoDB」</p>
+                    </div>
                 `;
             }
         }
